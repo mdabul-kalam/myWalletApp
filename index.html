@@ -32,17 +32,21 @@ body{color:var(--tx);font-family:Roboto,'Noto Sans Bengali',system-ui,sans-serif
 @keyframes overlayEnter{from{background:rgba(0,0,0,0)}to{background:rgba(0,0,0,.45)}}
 .w{animation:pageEnter .32s cubic-bezier(.2,.75,.25,1) both}
 .pg{animation:pageEnter .28s cubic-bezier(.2,.75,.25,1) both}
-.card{animation:cardEnter .38s cubic-bezier(.2,.75,.25,1) both}
+.card{animation:cardEnter .48s cubic-bezier(.2,.75,.25,1) both;will-change:transform,opacity}
 .card:nth-of-type(2){animation-delay:.035s}.card:nth-of-type(3){animation-delay:.07s}
-.ovl{animation:overlayEnter .2s ease both}.sheet{animation:sheetEnter .32s cubic-bezier(.2,.8,.2,1) both}
+.ovl{animation:overlayEnter .2s ease both}.sheet{animation:sheetEnter .42s cubic-bezier(.2,.8,.2,1) both;will-change:transform,opacity}
 .cb,.bt,.gb,.mi,.ct,.mo,.dl,.bk button{transition:transform .16s ease,filter .16s ease,background-color .18s ease}
 .cb:active,.bt:active,.gb:active,.mi:active,.ct:active,.mo:active,.dl:active,.bk button:active{transform:scale(.96)}
 .brand{font-size:22px;font-weight:800;letter-spacing:-.7px;line-height:1;padding:18px 0 0;display:flex;align-items:center;gap:0}
 .brand .brand-a{color:var(--tx)}.brand .brand-b{color:var(--or)}
 .ttl.pos{color:var(--gn)}.ttl.neg{color:#E5484D}
-.dn circle{animation:donutReveal .85s cubic-bezier(.2,.7,.25,1) both;transform-origin:112px 112px}
+.dn circle{animation:donutReveal .95s cubic-bezier(.2,.7,.25,1) both;transform-origin:112px 112px}
+.row{animation:rowEnter .32s ease both}
+@keyframes rowEnter{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+.brand{animation:brandEnter .55s cubic-bezier(.2,.75,.25,1) both}
+@keyframes brandEnter{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes donutReveal{from{opacity:.2;stroke-dashoffset:0}to{opacity:1}}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+@media(prefers-reduced-motion:reduce){.w,.pg{animation-duration:.32s!important}.card,.sheet,.ovl{animation-duration:.38s!important}*,*::before,*::after{transition-duration:.18s!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
