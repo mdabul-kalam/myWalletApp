@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F6F1E8">
-<title>Raihan's Wallet</title>
+<title>CoinPie</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;800&family=Noto+Sans+Bengali:wght@400;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,1,0" rel="stylesheet">
@@ -53,7 +53,8 @@ const defaultState=()=>({tx:[],cur:'৳',theme:'system',mode:'day',date:ymd(new 
 ]});
 let S=defaultState();try{const raw=localStorage.getItem('coinpie');if(raw){const x=JSON.parse(raw);if(x&&Array.isArray(x.tx)&&Array.isArray(x.cats))S={...defaultState(),...x}}}catch(e){console.warn('Could not read local data',e)}
 S.date=ymd(new Date());let V={n:'home',t:'e',m:S.date.slice(0,7)},lastDeleted=null,syncTimer=null,pollTimer=null,swipeStart=0,swiped=false;
-const SY={status:'off',email:localStorage.getItem('coinpie_google_email')||'',token:null,expires:0,fileId:null,busy:false,last:0,error:''};
+const savedOAuth=(()=>{try{return JSON.parse(sessionStorage.getItem('coinpie_oauth_session')||'null')}catch(e){return null}})();
+const SY={status:'off',email:localStorage.getItem('coinpie_google_email')||'',token:savedOAuth&&savedOAuth.expires>Date.now()?savedOAuth.token:null,expires:savedOAuth&&savedOAuth.expires>Date.now()?savedOAuth.expires:0,fileId:null,busy:false,last:0,error:'',refreshing:false};
 function theme(){const r=document.documentElement;if(S.theme==='system')r.removeAttribute('data-theme');else r.setAttribute('data-theme',S.theme)}
 function money(n){return (n<0?'-':'')+S.cur+Math.abs(Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:2})}
 function cat(id){return S.cats.find(c=>c.id===id)||dc(id,'Deleted','shape','#6B655C','e')}
@@ -73,39 +74,124 @@ function stats(){const m=V.m||S.date.slice(0,7),d=pd(m+'-01'),l=S.tx.filter(x=>y
 function detail(){const c=cat(V.c),m=V.m||S.date.slice(0,7),d=pd(m+'-01'),l=S.tx.filter(x=>x.c===V.c&&ymd(new Date(x.ts)).slice(0,7)===m).sort((a,b)=>b.ts-a.ts);return `<div class="w"><div class="bk"><button data-a="${esc(V.from||'home')}">${icon('back')}</button>${ic(c.i,c.c,52)}<div><h1 style="font-size:27px">${esc(c.n)}</h1><div style="color:var(--mu);font-size:17px;font-weight:500">${MO[d.getMonth()]} ${d.getFullYear()}</div></div></div><div class="card"><div style="color:var(--mu)">Total</div><b style="font-size:34px;display:block;margin:4px 0 8px">${money(l.reduce((a,x)=>a+x.a,0))}</b><span style="color:var(--mu)">${l.length} entries · tap to edit</span></div>${l.map(x=>{const t=new Date(x.ts);return `<div class="card" style="padding:4px 18px;margin-bottom:10px"><div class="row" data-tx="${esc(x.id)}"><div class="m"><b>${esc(fD(t))} ${t.getFullYear()}</b><span>${tm(t)}</span></div><div class="a">${money(x.a)}</div></div>${x.note?`<div class="detail-note">${esc(x.note)}</div>`:''}</div>`}).join('')||'<div class="em">No entries in this month.</div>'}</div>`}
 function cats(){return `<div class="w"><div class="bk"><button data-a="home">${icon('back')}</button><h1>Categories</h1></div>${['e','i'].map(t=>`<h3 style="margin:16px 4px 8px">${t==='e'?'Expense':'Income'}</h3><div class="card" style="padding:6px 16px">${S.cats.filter(c=>c.t===t).map(c=>`<div class="row">${ic(c.i,c.c)}<div class="m"><b>${esc(c.n)}</b></div><button class="cb" style="width:36px;height:36px;background:none" data-dc="${esc(c.id)}">${icon('minus')}</button></div>`).join('')||'<div class="em">No categories yet</div>'}</div><button class="gb" data-nc="${t}">${icon('plus')} New ${t==='e'?'expense':'income'} category</button>`).join('')}</div>`}
 function menu(){const item=(a,k,n)=>`<button class="mi" data-a="${a}">${icon(k)}${n}</button>`;return `<div class="pg"><div class="w" style="padding-top:24px"><button class="cb" data-a="home" style="margin-left:auto">${icon('back')}</button><div style="height:14px"></div>${item('cats','shape','Categories')}${item('stats','pie','Monthly statistics')}${item('cur','cur','Currency')}${item('thm','moon','Appearance')}${item('acc','user','Account & sync')}<div class="hr"></div>${item('bak','up','Back up data')}${item('res','hist','Restore backup')}</div></div>`}
-function acct(){const has=!!SY.token&&SY.expires>Date.now(),linked=!!SY.email;let status=has?'Connected · auto sync is active':linked?'Google account linked · reconnect to resume sync':'Not connected';if(SY.status==='err')status='Sync error · '+(SY.error||'Please reconnect');return `<div class="w"><div class="bk"><button data-a="menu">${icon('back')}</button><h1>Account & sync</h1></div><div class="card">${has?`<b style="font-size:20px">Google account connected</b><p style="color:var(--mu);margin:8px 0">${esc(SY.email)}</p><span class="pill">${icon('sync')} Auto sync on</span><p class="status" style="margin-top:14px">${esc(status)}${SY.last?' · Last sync '+new Date(SY.last).toLocaleTimeString():''}</p><button class="gb" data-a="sync">${icon('sync')} Sync now</button><button class="gb" data-a="logout">${icon('logout')} Disconnect Google</button>`:`<b style="font-size:20px">${linked?'Reconnect Google':'Sign in with Google'}</b><p class="status" style="margin:8px 0 12px">Sign in with your Google account to save CoinPie data to your Google Drive and sync it between devices. Local data remains on this device too.</p><p class="status">${esc(status)}</p><button class="gb" data-a="login" ${GOOGLE_CLIENT_ID.startsWith('YOUR_')?'disabled':''}><span style="font-weight:800;font-size:21px;color:#4285F4">G</span>${linked?'Reconnect with Google':'Continue with Google'}</button>${GOOGLE_CLIENT_ID.startsWith('YOUR_')?'<p class="status danger">Google OAuth Client ID has not been configured yet. Add it at the top of this HTML file.</p>':''}</div>`}<div class="card"><b>Drive backup</b><p class="status">Backup file: <b>${BACKUP_NAME}</b>. It will be created in the root of your Google Drive and updated automatically after changes. The app requests access only to files it creates or opens.</p><p class="status">Google sign-in tokens are kept in memory, not in local storage. After reopening the app, reconnect once to resume cloud sync.</p></div></div>`}
+function acct(){const has=!!SY.token&&SY.expires>Date.now(),linked=!!SY.email;let status=has?'Connected · auto sync is active':linked?'Google account linked · reconnect to resume sync':'Not connected';if(SY.status==='err')status='Sync error · '+(SY.error||'Please reconnect');return `<div class="w"><div class="bk"><button data-a="menu">${icon('back')}</button><h1>Account & sync</h1></div><div class="card">${has?`<b style="font-size:20px">Google account connected</b><p style="color:var(--mu);margin:8px 0">${esc(SY.email)}</p><span class="pill">${icon('sync')} Auto sync on</span><p class="status" style="margin-top:14px">${esc(status)}${SY.last?' · Last sync '+new Date(SY.last).toLocaleTimeString():''}</p>${SY.status==='err'?'<p class="status danger">The Google sign-in is active, but Drive sync failed. Use Sync now first; the error below explains what needs fixing.</p>':''}<button class="gb" data-a="sync">${icon('sync')} Retry / sync now</button><button class="gb" data-a="logout">${icon('logout')} Disconnect Google</button>`:`<b style="font-size:20px">${linked?'Reconnect Google':'Sign in with Google'}</b><p class="status" style="margin:8px 0 12px">Sign in with your Google account to save CoinPie data to your Google Drive and sync it between devices. Local data remains on this device too.</p><p class="status">${esc(status)}</p><button class="gb" data-a="login" ${GOOGLE_CLIENT_ID.startsWith('YOUR_')?'disabled':''}><span style="font-weight:800;font-size:21px;color:#4285F4">G</span>${linked?'Reconnect with Google':'Continue with Google'}</button>${GOOGLE_CLIENT_ID.startsWith('YOUR_')?'<p class="status danger">Google OAuth Client ID has not been configured yet. Add it at the top of this HTML file.</p>':''}</div>`}<div class="card"><b>Drive backup</b><p class="status">Backup file: <b>${BACKUP_NAME}</b>. It will be created in the root of your Google Drive and updated automatically after changes. The app requests access only to files it creates or opens.</p><p class="status">Google sign-in tokens are kept in memory, not in local storage. After reopening the app, reconnect once to resume cloud sync.</p></div></div>`}
 function render(){const n=V.n;$('#app').innerHTML=n==='home'?home():n==='stats'?stats():n==='detail'?detail():n==='cats'?cats():n==='acc'?acct():menu()}
 function sheet(html){$('#ov').innerHTML=`<div class="ovl" data-x="1"><div class="sheet">${html}</div></div>`}function shut(){$('#ov').innerHTML=''}
 function entry(type,edit){let selected=edit?edit.c:null;const list=()=>S.cats.filter(c=>c.t===type);const d=edit?new Date(edit.ts):pd(S.date);sheet(`<div class="hd"></div><h2>${edit&&edit.id?'Edit':'Add'} ${type==='e'?'expense':'income'}</h2><div class="sub">${edit?fD(d):(S.date===ymd(new Date())?'Today · ':'')+fD(d)}</div><div class="amt"><span>${esc(S.cur)}</span><input id="am" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0" value="${edit?esc(edit.a):''}"></div><div class="lb">Category</div><div class="g4">${list().map(c=>`<button class="ct ${selected===c.id?'on':''}" data-ct="${esc(c.id)}">${ic(c.i,c.c)}<span>${esc(c.n)}</span></button>`).join('')}<button class="ct" data-n="1"><div class="ic nw">${icon('plus')}</div><span>New</span></button></div><div class="lb">Note <span style="font-size:14px;color:var(--mu);font-weight:400">(optional)</span></div><textarea class="note" id="entryNote" rows="2" placeholder="What was this ${type==='e'?'expense':'income'} for?">${edit?esc(edit.note||''):''}</textarea><button class="sv ${type==='i'?'i':''}" id="sv">Save</button>${edit&&edit.id?'<button class="del" id="dl">Delete entry</button>':''}`);
 const am=$('#am'),sv=$('#sv'),note=$('#entryNote'),check=()=>sv.classList.toggle('ok',Number(am.value)>0&&!!selected);check();if(!edit)am.focus();am.oninput=check;
 $('.sheet').onclick=e=>{const b=e.target.closest('[data-ct]');if(b){selected=b.dataset.ct;document.querySelectorAll('.ct').forEach(x=>x.classList.toggle('on',x===b));check()}if(e.target.closest('[data-n]'))catDlg(type,id=>{selected=id;const draft={...(edit||{}),c:id,a:Number(am.value)||'',ts:d.getTime(),note:note.value};entry(type,draft);})};
-sv.onclick=()=>{if(!sv.classList.contains('ok'))return;const amount=Math.round(Number(am.value)*100)/100;if(edit&&edit.id){const found=S.tx.find(x=>x.id===edit.id);if(found)Object.assign(found,{a:amount,c:selected,note:note.value.trim()})}else{const now=new Date(),when=pd(ymd(d));when.setHours(now.getHours(),now.getMinutes(),now.getSeconds(),0);S.tx.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:type,c:selected,a:amount,note:note.value.trim(),ts:when.getTime()})}persist();shut();render()};const dl=$('#dl');if(dl)dl.onclick=()=>{removeEntry(edit.id);shut()};}
-function removeEntry(id){const x=S.tx.find(t=>t.id===id);if(!x)return;lastDeleted=x;S.tx=S.tx.filter(t=>t.id!==id);persist();render();toast('Entry deleted',true)}
+sv.onclick=()=>{if(!sv.classList.contains('ok'))return;const amount=Math.round(Number(am.value)*100)/100;if(edit&&edit.id){const found=S.tx.find(x=>x.id===edit.id);if(found)Object.assign(found,{a:amount,c:selected,note:note.value.trim(),updatedAt:Date.now()})}else{const now=new Date(),when=pd(ymd(d));when.setHours(now.getHours(),now.getMinutes(),now.getSeconds(),0);S.tx.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:type,c:selected,a:amount,note:note.value.trim(),ts:when.getTime(),updatedAt:Date.now()})}persist();shut();render()};const dl=$('#dl');if(dl)dl.onclick=()=>{removeEntry(edit.id);shut()};}
+function removeEntry(id){const x=S.tx.find(t=>t.id===id);if(!x)return;lastDeleted=x;S.tx=S.tx.filter(t=>t.id!==id);S._deletedTx=Array.isArray(S._deletedTx)?S._deletedTx:[];S._deletedTx.push({id,at:Date.now()});persist();render();toast('Entry deleted',true)}
 function catDlg(type,cb){let tab='i',ik='restaurant',em=EM[0],col=CC[0],nm='';const dg=$('#dg');const draw=()=>{const k=tab==='e'?'e:'+em:ik;dg.innerHTML=`<div class="ovl" data-x="2"><div class="dg"><div class="t">${ic(k,col)}<div><h2>New category</h2><div class="sub">${type==='e'?'Expense':'Income'}</div></div></div><input class="ni" id="nn" placeholder="Name" value="${esc(nm)}"><div class="tb"><button class="${tab==='i'?'on':''}" data-t="i">Icons</button><button class="${tab==='e'?'on':''}" data-t="e">Emoji</button></div><div class="g6" style="--sel:${col}">${tab==='i'?PK.map(k=>`<button class="${k===ik?'on':''}" data-k="${k}">${icon(k)}</button>`).join(''):EM.map(e=>`<button class="${e===em?'on':''}" data-e="${e}">${e}</button>`).join('')}</div><div class="lb" style="font-size:19px;margin:6px 0">Colour</div><div class="cl">${CC.map(c=>`<button style="background:${c}" class="${c===col?'on':''}" data-c="${c}">${c===col?icon('chk'):''}</button>`).join('')}</div><div class="ac"><button data-z="0">Cancel</button><button class="${nm.trim()?'':'d'}" data-z="1">Save</button></div></div></div>`;const n=$('#nn');n.oninput=()=>{nm=n.value;dg.querySelector('[data-z="1"]').classList.toggle('d',!nm.trim())}};draw();dg.onclick=e=>{const b=e.target.closest('button');if(!b){if(e.target.dataset.x==='2')dg.innerHTML='';return}const x=b.dataset;if(x.t){tab=x.t}else if(x.k){ik=x.k}else if(x.e){em=x.e}else if(x.c){col=x.c}else if(x.z==='0'){dg.innerHTML='';return}else if(x.z==='1'){if(!nm.trim())return;const id='c'+Date.now().toString(36);S.cats.push(dc(id,nm.trim(),tab==='e'?'e:'+em:ik,col,type));persist();dg.innerHTML='';cb(id);return}else return;draw()}}
 function pick(){sheet(`<div class="hd"></div><h2>Select date</h2><div class="sub">View by day or by month</div><div class="seg"><button class="${S.mode==='day'?'on':''}" data-m="day">By day</button><button class="${S.mode==='month'?'on':''}" data-m="month">By month</button></div>${S.mode==='day'?`<input class="pk" type="date" id="pk" value="${S.date}">`:`<input class="pk" type="month" id="pk" value="${S.date.slice(0,7)}">`}<button class="sv" id="pt" style="background:var(--ib);color:var(--it)">Go to today</button><button class="sv ok" id="pd">Done</button>`);$('.sheet').onclick=e=>{const m=e.target.closest('[data-m]');if(m){S.mode=m.dataset.m;persist(false);pick();render()}};$('#pk').onchange=e=>{const v=e.target.value;if(v){S.date=S.mode==='day'?v:v+'-01';render()}};$('#pt').onclick=()=>{S.date=ymd(new Date());shut();render()};$('#pd').onclick=()=>{persist(false);shut();render()}}
 function options(title,items,current,fn){sheet(`<div class="hd"></div><h2>${esc(title)}</h2><div style="height:14px"></div>${items.map(([k,n])=>`<button class="mo ${k===current?'on':''}" data-o="${esc(k)}"><b>${esc(n)}</b></button>`).join('')}`);$('.sheet').onclick=e=>{const b=e.target.closest('[data-o]');if(b){fn(b.dataset.o);persist(false);shut();render()}}}
 function step(delta){const x=pd(S.date);if(S.mode==='day')x.setDate(x.getDate()+delta);else x.setMonth(x.getMonth()+delta,1);S.date=ymd(x);render()}
 // Google OAuth + Google Drive sync. A single JSON backup is created and updated.
 function googleReady(){return !!(window.google&&google.accounts&&google.accounts.oauth2)}
-function connectGoogle(){if(GOOGLE_CLIENT_ID.startsWith('YOUR_')){toast('Add your Google OAuth Client ID first');return}if(!googleReady()){toast('Google sign-in is still loading. Try again.');return}const client=google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:'openid email profile '+DRIVE_SCOPE,callback:async response=>{if(response.error){SY.status='err';SY.error=response.error;render();toast('Google sign-in failed');return}SY.token=response.access_token;SY.expires=Date.now()+(Number(response.expires_in||3600)-60)*1000;SY.status='on';SY.error='';try{const p=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+SY.token}});if(!p.ok)throw new Error('Could not read Google profile');const user=await p.json();SY.email=user.email||'';if(SY.email)localStorage.setItem('coinpie_google_email',SY.email);await syncDrive(true);startPolling();render();toast('Google Drive sync connected')}catch(e){SY.status='err';SY.error=e.message||'Sync failed';render();toast('Could not sync with Google Drive')}}});client.requestAccessToken({prompt:'select_account'})}
-async function driveRequest(url,options={}){if(!SY.token||Date.now()>=SY.expires)throw new Error('Google session expired. Reconnect to resume sync.');const res=await fetch(url,{...options,headers:{Authorization:'Bearer '+SY.token,...(options.headers||{})}});if(!res.ok){let msg='Google Drive request failed ('+res.status+')';try{const j=await res.json();msg=j.error?.message||msg}catch(e){}throw new Error(msg)}return res}
-async function findBackup(){const q=encodeURIComponent("name='"+BACKUP_NAME.replace(/'/g,"\\'")+"' and trashed=false");const url='https://www.googleapis.com/drive/v3/files?spaces=drive&q='+q+'&orderBy=modifiedTime%20desc&pageSize=10&fields=files(id,name,modifiedTime)';const r=await driveRequest(url);const j=await r.json();return (j.files||[])[0]||null}
+function saveOAuthSession(){try{if(SY.token&&SY.expires>Date.now())sessionStorage.setItem('coinpie_oauth_session',JSON.stringify({token:SY.token,expires:SY.expires}));else sessionStorage.removeItem('coinpie_oauth_session')}catch(e){}}
+function connectGoogle(silent=false){
+ if(GOOGLE_CLIENT_ID.startsWith('YOUR_')){toast('Add your Google OAuth Client ID first');return}
+ if(!googleReady()){toast('Google sign-in is still loading. Try again.');return}
+ const client=google.accounts.oauth2.initTokenClient({
+  client_id:GOOGLE_CLIENT_ID,scope:'openid email profile '+DRIVE_SCOPE,
+  callback:async response=>{
+   SY.refreshing=false;
+   if(response.error||!response.access_token){
+    SY.status='err';SY.error=response.error_description||response.error||'Google did not return an access token';
+    if(silent){SY.token=null;SY.expires=0;saveOAuthSession()}
+    render();toast('Google authorization failed: '+SY.error);return
+   }
+   SY.token=response.access_token;SY.expires=Date.now()+(Number(response.expires_in||3600)-90)*1000;
+   SY.status='on';SY.error='';saveOAuthSession();
+   try{
+    const p=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+SY.token}});
+    if(!p.ok){let msg='Google profile request failed ('+p.status+')';try{const j=await p.json();msg=j.error?.message||msg}catch(e){}throw new Error(msg)}
+    const user=await p.json();SY.email=user.email||SY.email;
+    if(SY.email)localStorage.setItem('coinpie_google_email',SY.email);
+    await syncDrive(true);startPolling();render();
+    if(SY.status==='on')toast('Google Drive sync connected');
+    else toast('Google login worked, but Drive sync failed: '+(SY.error||'check the error in Account & sync'));
+   }catch(e){SY.status='err';SY.error=e.message||'Sync failed';render();toast(SY.error)}
+  }
+ });
+ try{client.requestAccessToken({prompt:silent?'':'select_account',hint:SY.email||undefined})}
+ catch(e){SY.refreshing=false;SY.status='err';SY.error=e.message||'Could not request Google access';render();toast(SY.error)}
+}
+async function driveRequest(url,options={}){
+ if(!SY.token||Date.now()>=SY.expires)throw new Error('Google access token expired. Reconnect Google to continue syncing.');
+ const res=await fetch(url,{...options,headers:{Authorization:'Bearer '+SY.token,...(options.headers||{})}});
+ if(!res.ok){let msg='Google Drive request failed ('+res.status+')';try{const j=await res.json();msg=j.error?.message||j.error?.status||msg}catch(e){}if(res.status===401){SY.token=null;SY.expires=0;saveOAuthSession()}throw new Error(msg)}
+ return res
+}
+async function findBackup(){
+ const q=encodeURIComponent("name='"+BACKUP_NAME.replace(/'/g,"\\'")+"' and trashed=false");
+ const url='https://www.googleapis.com/drive/v3/files?spaces=drive&q='+q+'&orderBy=modifiedTime%20desc&pageSize=10&fields=files(id,name,modifiedTime)';
+ const r=await driveRequest(url);const j=await r.json();return (j.files||[])[0]||null
+}
 async function readBackup(id){const r=await driveRequest('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media');return await r.json()}
-async function writeBackup(payload,file){const body=JSON.stringify(payload);if(file){await driveRequest('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(file.id)+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body});SY.fileId=file.id}else{const meta=await driveRequest('https://www.googleapis.com/drive/v3/files?fields=id',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:BACKUP_NAME,mimeType:'application/json'})});const created=await meta.json();await driveRequest('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(created.id)+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body});SY.fileId=created.id}}
-async function syncDrive(initial=false){if(!SY.token||SY.busy)return;SY.busy=true;try{const file=await findBackup();if(file){SY.fileId=file.id;const remote=await readBackup(file.id);if(remote&&Array.isArray(remote.tx)&&Array.isArray(remote.cats)&&Number(remote.u||0)>Number(S.u||0)){S={...defaultState(),...remote};S.date=ymd(new Date());theme();localStorage.setItem('coinpie',JSON.stringify(S));render()}else if(!file||Number(S.u||0)>Number(remote?.u||0)){await writeBackup(S,file)}}else{await writeBackup(S,null)}SY.status='on';SY.error='';SY.last=Date.now();}catch(e){SY.status='err';SY.error=e.message||'Sync failed';console.error(e)}finally{SY.busy=false;if(V.n==='acc')render()}}
-function queueSync(){if(!SY.token)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncDrive(false),900)}
-function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(()=>{if(SY.token&&SY.expires>Date.now())syncDrive(false);else if(SY.token){SY.token=null;SY.status='expired';render()}},30000)}
-function disconnectGoogle(){SY.token=null;SY.expires=0;SY.status='off';SY.fileId=null;clearInterval(pollTimer);render();toast('Google disconnected. Local data is unchanged')}
+async function writeBackup(payload,file){
+ const body=JSON.stringify(payload);
+ if(file){await driveRequest('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(file.id)+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body});SY.fileId=file.id}
+ else{
+  const meta=await driveRequest('https://www.googleapis.com/drive/v3/files?fields=id',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:BACKUP_NAME,mimeType:'application/json'})});
+  const created=await meta.json();await driveRequest('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(created.id)+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body});SY.fileId=created.id
+ }
+}
+function mergeCloudState(local,remote){
+ const l={...defaultState(),...(local||{})},r={...defaultState(),...(remote||{})};
+ const deletedTx=new Map();[...(r._deletedTx||[]),...(l._deletedTx||[])].forEach(x=>{if(x&&x.id)deletedTx.set(x.id,Math.max(deletedTx.get(x.id)||0,Number(x.at)||0))});
+ const txMap=new Map();
+ [...(r.tx||[]),...(l.tx||[])].forEach(x=>{
+  if(!x||!x.id)return;const old=txMap.get(x.id);
+  if(!old||Number(x.updatedAt||0)>=Number(old.updatedAt||0))txMap.set(x.id,x);
+ });
+ for(const [id,at] of deletedTx){const x=txMap.get(id);if(x&&Number(x.updatedAt||0)<=at)txMap.delete(id)}
+ const deletedCats=new Map();[...(r._deletedCats||[]),...(l._deletedCats||[])].forEach(x=>{if(x&&x.id)deletedCats.set(x.id,Math.max(deletedCats.get(x.id)||0,Number(x.at)||0))});
+ const catMap=new Map();[...(r.cats||[]),...(l.cats||[])].forEach(x=>{if(x&&x.id&&!catMap.has(x.id))catMap.set(x.id,x)});
+ for(const id of deletedCats.keys())catMap.delete(id);
+ const newer=Number(l.u||0)>=Number(r.u||0)?l:r;
+ return {...r,...newer,tx:[...txMap.values()].sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)),cats:[...catMap.values()],_deletedTx:[...deletedTx].map(([id,at])=>({id,at})),_deletedCats:[...deletedCats].map(([id,at])=>({id,at})),u:Math.max(Number(l.u||0),Number(r.u||0))};
+}
+async function syncDrive(initial=false){
+ if(!SY.token||SY.busy)return;SY.busy=true;
+ try{
+  const file=await findBackup();
+  if(file){
+   SY.fileId=file.id;const remote=await readBackup(file.id);
+   if(remote&&Array.isArray(remote.tx)&&Array.isArray(remote.cats)){
+    const merged=mergeCloudState(S,remote);
+    const remoteText=JSON.stringify(remote),mergedText=JSON.stringify(merged);
+    S=merged;S.date=ymd(new Date());theme();
+    try{localStorage.setItem('coinpie',JSON.stringify(S))}catch(e){throw new Error('Could not save the synced data on this device')}
+    if(mergedText!==remoteText)await writeBackup(S,file);
+    if(V.n!=='acc')render();
+   }else{await writeBackup(S,file)}
+  }else{await writeBackup(S,null)}
+  SY.status='on';SY.error='';SY.last=Date.now();saveOAuthSession();
+ }catch(e){SY.status='err';SY.error=e.message||'Sync failed';console.error('CoinPie Drive sync:',e)}
+ finally{SY.busy=false;if(V.n==='acc')render()}
+}
+function queueSync(){if(!SY.token||Date.now()>=SY.expires)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncDrive(false),1000)}
+function startPolling(){
+ clearInterval(pollTimer);
+ pollTimer=setInterval(()=>{
+  if(!SY.token){return}
+  if(Date.now()>=SY.expires){SY.token=null;SY.expires=0;saveOAuthSession();SY.status='expired';SY.error='Google session expired. Reconnect to resume syncing.';render();clearInterval(pollTimer);return}
+  if(SY.expires-Date.now()<180000&&!SY.refreshing){SY.refreshing=true;connectGoogle(true);return}
+  syncDrive(false)
+ },20000)
+}
+function disconnectGoogle(){SY.token=null;SY.expires=0;SY.status='off';SY.fileId=null;SY.refreshing=false;saveOAuthSession();clearInterval(pollTimer);render();toast('Google disconnected. Local data is unchanged')}
 function exportBackup(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='coinpie-backup.json';a.click();URL.revokeObjectURL(url);toast('Backup downloaded')}
 function restoreBackup(){const f=document.createElement('input');f.type='file';f.accept='.json,application/json';f.onchange=()=>{const file=f.files&&f.files[0];if(!file)return;file.text().then(raw=>{try{const x=JSON.parse(raw);if(!Array.isArray(x.tx)||!Array.isArray(x.cats))throw new Error('Invalid backup file');S={...defaultState(),...x};S.date=ymd(new Date());theme();persist();V={n:'home'};render();toast('Backup restored')}catch(e){toast('Could not restore: invalid backup')}})};f.click()}
 
 document.addEventListener('click',e=>{const t=e.target.closest('button,[data-tx],[data-cd]')||e.target;const action=t.closest('[data-a]'),A=action&&action.dataset.a;
 if(t.dataset.x==='1'){shut();return}if(t.dataset.x==='2'){$('#dg').innerHTML='';return}
-if(t.closest('[data-undo]')&&lastDeleted){S.tx.push(lastDeleted);lastDeleted=null;persist();render();$('#tg').innerHTML='';return}
+if(t.closest('[data-undo]')&&lastDeleted){S.tx.push({...lastDeleted,updatedAt:Date.now()});S._deletedTx=(S._deletedTx||[]).filter(z=>z.id!==lastDeleted.id);lastDeleted=null;persist();render();$('#tg').innerHTML='';return}
 const tx=t.closest('[data-tx]');if(tx&&!swiped){const x=S.tx.find(y=>y.id===tx.dataset.tx);if(x)entry(x.t,x);return}
 const cd=t.closest('[data-cd]');if(cd){V={n:'detail',c:cd.dataset.cd,from:V.n==='stats'?'stats':'home',m:V.n==='stats'?V.m:S.date.slice(0,7)};render();return}
 const st=t.closest('[data-st]');if(st){V.t=st.dataset.st;render();return}const sm=t.closest('[data-sm]');if(sm){V.m=sm.dataset.sm;render();return}
-const del=t.closest('[data-dc]');if(del){const id=del.dataset.dc;if(S.tx.some(x=>x.c===id)){toast('This category has entries. Existing entries will remain.')}S.cats=S.cats.filter(c=>c.id!==id);persist();render();return}
+const del=t.closest('[data-dc]');if(del){const id=del.dataset.dc;if(S.tx.some(x=>x.c===id)){toast('This category has entries. Existing entries will remain.')}S.cats=S.cats.filter(c=>c.id!==id);S._deletedCats=Array.isArray(S._deletedCats)?S._deletedCats:[];S._deletedCats.push({id,at:Date.now()});persist();render();return}
 const nc=t.closest('[data-nc]');if(nc){catDlg(nc.dataset.nc,()=>render());return}
 if(!A)return;
 if(A==='menu')V={n:'menu'};else if(A==='home')V={n:'home'};else if(A==='prev'){step(-1);return}else if(A==='next'){step(1);return}else if(A==='pick'){pick();return}else if(A==='ae'){entry('e');return}else if(A==='ai'){entry('i');return}
@@ -119,6 +205,7 @@ render()});
 document.addEventListener('touchstart',e=>{swipeStart=e.touches[0].clientX;swiped=false},{passive:true});document.addEventListener('touchend',e=>{const row=e.target.closest('[data-tx]');if(row&&swipeStart-e.changedTouches[0].clientX>90){swiped=true;removeEntry(row.dataset.tx);setTimeout(()=>swiped=false,350)}},{passive:true});
 window.addEventListener('online',()=>{if(SY.token&&SY.expires>Date.now())syncDrive(false)});
 theme();render();
+if(SY.token&&SY.expires>Date.now()){SY.status='on';startPolling();setTimeout(()=>syncDrive(false),700)}
 </script>
 </body>
 </html>
